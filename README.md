@@ -7,5 +7,3 @@ I'm using the amount of contributions because the topic tags are not often used 
 
 ## Sample Use-Case (Cybersecurity)
 This can be integrated to an incident management tool so that SOC and IR can quickly identify the contact for repositories with exposed secrets/credentials.
-
-An alternative paid solution that can also do this is Legit Security.

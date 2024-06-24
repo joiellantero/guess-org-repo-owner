@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import pandas as pd
 
 
-def get_repo_details(owner, repo):
+def get_repo_details(owner, repo, token):
     # GitHub API URL for the repository
     url = f"https://api.github.com/repos/{owner}/{repo}/contributors"
 
@@ -37,29 +37,29 @@ def get_repo_details(owner, repo):
         print(f"Failed to fetch repository details. Status code: {response.status_code}")
 
 
-def get_max_contributor(owner, repo):
-    result = get_repo_details(owner, repo)
+def get_max_contributor(owner, repo, token, df):
+    non_bot_contributors = []
+    non_bot_contributors_shortnames = []
 
-    if not result:
+    contributors = get_repo_details(owner, repo, token)
+
+    if not contributors:
         print(f"No contributors found for repository '{owner}/{repo}'")
         sys.exit()
 
-    max_contributor = max(result, key=lambda x: x['Contributions'])
-    
-    if check_if_bot(max_contributor['User']):
-        print('Bot found as max contributor. Retrieving next highest contributor...')
-        next_contributor = get_next_highest_contributor(result, max_contributor['User'])
-        return next_contributor
-    return max_contributor['User']
+    for contributor in contributors:
+        if not check_if_bot(contributor['User']):
+            non_bot_contributors.append(contributor)
 
+    for non_bot_contributor in non_bot_contributors:
+        shortname = find_shortname_by_github_username(non_bot_contributor['User'], df)
+        if shortname is not None:
+            non_bot_contributor['Shortname'] = shortname
+            non_bot_contributors_shortnames.append(non_bot_contributor)
 
-def get_next_highest_contributor(contributors, bot_contributor):
-    # Filter out the bot contributor
-    non_bot_contributors = [contributor for contributor in contributors if contributor['User'] != bot_contributor]
-    
-    # Find the next highest contributor
-    next_highest_contributor = max(non_bot_contributors, key=lambda x: x['Contributions'])
-    return next_highest_contributor['User']
+    if non_bot_contributors_shortnames:
+        return max(non_bot_contributors_shortnames, key=lambda x: x['Contributions'])['Shortname']
+    return None
 
 
 # Function to check if a github_username is a bot
@@ -85,7 +85,7 @@ def extract_markdown_table(content):
     return "\n".join(table_lines)
 
 
-def get_users_list(owner, users):
+def get_users_list(owner, users, token):
     # URL to the raw markdown file in the GitHub repository
     url = f"https://raw.githubusercontent.com/{owner}/{users}"
     
@@ -139,7 +139,7 @@ def find_shortname_by_github_username(github_username, df):
         shortname = result.iloc[0]['shortname']
         return shortname
     else:
-        return None, None
+        return None
     
 
 if __name__ == "__main__":
@@ -152,9 +152,13 @@ if __name__ == "__main__":
     users = os.getenv("USERS_REPO")
 
     if owner and repo and token and users:
-        username = get_max_contributor(owner, repo)
-        users_df = get_users_list(owner, users)
-        shortname = find_shortname_by_github_username(username, users_df)
+        users_df = get_users_list(owner, users, token)
+        shortname = get_max_contributor(owner, repo, token, users_df)
+
+        if shortname is None:
+            print("No shortnames for all contributors were found.")
+            sys.exit()
+
         print(f"Possible repo owner: {shortname}")
     else:
         print("Environment variables OWNER, REPOSITORY_NAME, ACCESS_TOKEN, and USERS_REPO must be set.")

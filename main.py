@@ -1,5 +1,6 @@
 import os
 import io
+import sys
 import requests
 from dotenv import load_dotenv
 import pandas as pd
@@ -38,8 +39,33 @@ def get_repo_details(owner, repo):
 
 def get_max_contributor(owner, repo):
     result = get_repo_details(owner, repo)
+
+    if not result:
+        print(f"No contributors found for repository '{owner}/{repo}'")
+        sys.exit()
+
     max_contributor = max(result, key=lambda x: x['Contributions'])
+    
+    if check_if_bot(max_contributor['User']):
+        print('Bot found as max contributor. Retrieving next highest contributor...')
+        next_contributor = get_next_highest_contributor(result, max_contributor['User'])
+        return next_contributor
     return max_contributor['User']
+
+
+def get_next_highest_contributor(contributors, bot_contributor):
+    # Filter out the bot contributor
+    non_bot_contributors = [contributor for contributor in contributors if contributor['User'] != bot_contributor]
+    
+    # Find the next highest contributor
+    next_highest_contributor = max(non_bot_contributors, key=lambda x: x['Contributions'])
+    return next_highest_contributor['User']
+
+
+# Function to check if a github_username is a bot
+def check_if_bot(github_username):
+    bot_keywords = ['-bot', 'bot', '[bot]']
+    return any(keyword in github_username.lower() for keyword in bot_keywords)
 
 
 # Function to extract the markdown table from the file
@@ -104,39 +130,17 @@ def get_users_list(owner, users):
         return df
     else:
         print(f"Failed to fetch users repository. Status code: {response.status_code}")
-    
+
 
 # Function to find employee name (shortname) by github_username
 def find_shortname_by_github_username(github_username, df):
     result = df[df['github_username'] == github_username]
     if not result.empty:
         shortname = result.iloc[0]['shortname']
-        if check_if_bot(github_username):
-            shortname = find_next_highest_contributor(df, github_username)
         return shortname
     else:
-        return None
+        return None, None
     
-
-# Function to check if a github_username is a bot
-def check_if_bot(github_username):
-    bot_keywords = ['-bot', 'bot', '[bot]']
-    return any(keyword in github_username.lower() for keyword in bot_keywords)
-
-
-# Function to find the next most contributions from a real user
-def find_next_highest_contributor(df, bot_username):
-    # Filter out rows where github_username is a bot
-    non_bot_df = df[df['github_username'].apply(lambda x: not check_if_bot(x))]
-    
-    # Sort by contributions (assuming 'contributions' is a column in your DataFrame)
-    sorted_df = non_bot_df.sort_values(by='contributions', ascending=False)
-    
-    # Get the first row after the bot's contributions
-    next_contributor = sorted_df.iloc[1]  # Assuming the first row is the bot
-    
-    return next_contributor['shortname']
-
 
 if __name__ == "__main__":
     # Load environment variables from .env file
@@ -151,6 +155,6 @@ if __name__ == "__main__":
         username = get_max_contributor(owner, repo)
         users_df = get_users_list(owner, users)
         shortname = find_shortname_by_github_username(username, users_df)
-        print(shortname)
+        print(f"Possible repo owner: {shortname}")
     else:
         print("Environment variables OWNER, REPOSITORY_NAME, ACCESS_TOKEN, and USERS_REPO must be set.")

@@ -110,9 +110,32 @@ def get_users_list(owner, users):
 def find_shortname_by_github_username(github_username, df):
     result = df[df['github_username'] == github_username]
     if not result.empty:
-        return result.iloc[0]['shortname']
+        shortname = result.iloc[0]['shortname']
+        if check_if_bot(github_username):
+            shortname = find_next_highest_contributor(df, github_username)
+        return shortname
     else:
         return None
+    
+
+# Function to check if a github_username is a bot
+def check_if_bot(github_username):
+    bot_keywords = ['-bot', 'bot', '[bot]']
+    return any(keyword in github_username.lower() for keyword in bot_keywords)
+
+
+# Function to find the next most contributions from a real user
+def find_next_highest_contributor(df, bot_username):
+    # Filter out rows where github_username is a bot
+    non_bot_df = df[df['github_username'].apply(lambda x: not check_if_bot(x))]
+    
+    # Sort by contributions (assuming 'contributions' is a column in your DataFrame)
+    sorted_df = non_bot_df.sort_values(by='contributions', ascending=False)
+    
+    # Get the first row after the bot's contributions
+    next_contributor = sorted_df.iloc[1]  # Assuming the first row is the bot
+    
+    return next_contributor['shortname']
 
 
 if __name__ == "__main__":
